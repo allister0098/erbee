@@ -1,0 +1,93 @@
+#!/usr/bin/env ruby
+
+require "optparse"
+require "erbee"
+
+module Erbee
+  class CLI
+    def self.start(argv)
+      self.load_rails_application
+
+      puts "Loading Rails application succeeded!"
+
+      options = {
+        depth: 2,
+        output_path: "er_diagram.md"
+      }
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: erbee MODEL [options]"
+
+        opts.on("--depth=DEPTH", Integer, "Association exploration depth (default: 2)") do |d|
+          options[:depth] = d
+        end
+
+        opts.on("--output=PATH", "Output file path (default: er_diagram.md)") do |o|
+          options[:output_path] = o
+        end
+
+        opts.on("-h", "--help", "Prints this help") do
+          puts opts
+          exit
+        end
+      end
+
+      parser.parse!(argv)
+
+      # The first argument is expected to be the model name
+      model_name = argv[0]
+      if model_name.nil?
+        puts parser
+        exit 1
+      end
+
+      # Configure Erbee using the parsed options
+      Erbee.configure do |config|
+        config.depth = options[:depth]
+        config.output_path = options[:output_path]
+      end
+
+      explorer = Erbee::AssociationExplorer.new(model_name, depth: Erbee.configuration.depth)
+      model_infos = explorer.explore
+
+      renderer = Erbee::DiagramRenderer.new(model_infos)
+      renderer.render
+
+      puts "ER diagram generated at #{Erbee.configuration.output_path}"
+    end
+
+    def self.load_rails_application
+      if File.exist?("config/environment.rb")
+        begin
+          require File.expand_path("config/environment.rb", Dir.pwd)
+
+          if defined?(Rails)
+            Rails.application.eager_load!
+            Rails.application.config.eager_load_namespaces.each(&:eager_load!) if Rails.application.config.respond_to?(:eager_load_namespaces)
+          end
+
+        rescue LoadError
+          puts <<~MSG
+            Could not load config/environment.rb. Some models may not be loaded,
+            resulting in an incomplete diagram. If you're using ActiveRecord without Rails,
+            ensure your models are manually required before running this command.
+          MSG
+          exit 1
+
+        rescue TypeError
+          puts <<~MSG
+            Failed to eager load models. Some classes may remain unloaded,
+            leading to an incomplete diagram. Please check your environment setup.
+          MSG
+          exit 1
+        end
+      else
+        puts "No Rails application found in the current directory."
+        exit 1
+      end
+    end
+  end
+end
+
+# Call the CLI entry point with the arguments provided by the user
+Erbee::CLI.start(ARGV)
