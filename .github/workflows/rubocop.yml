@@ -1,0 +1,36 @@
+name: RuboCop
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  rubocop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.1
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install
+
+      - name: RuboCop with reviewdog
+        uses: reviewdog/action-rubocop@v2
+        with:
+          rubocop_version: '~> 1.46.0'
+
+          rubocop_flags: ''
+
+          reporter: 'github-pr-review'
+
+          filter_mode: 'diff'
+
+          fail_on_error: false
+
+          github_token: ${{ secrets.GITHUB_TOKEN }}
